@@ -2,6 +2,7 @@ from bs4 import BeautifulSoup
 from requests_html import HTMLSession
 import pandas as pd
 import time
+import glob
 import random
 
 
@@ -66,7 +67,7 @@ def get_team_urls(base_url: str, league_url: str, year=2022) -> dict:
     return team_dict
 
 
-def get_stats_table(url: str, team: str, id: str) -> None:  
+def get_stats_table(url: str, team: str, id: str, league: str) -> None:  
     """
     Scrapes the pitching and batting table depending on the ID provided
     
@@ -103,10 +104,50 @@ def get_stats_table(url: str, team: str, id: str) -> None:
     team_norm = team_norm.replace(" ", "_")
     local_filename = f"{team_norm}_{id}.csv"
 
-    stats_df.to_csv(f"resources/{local_filename}")
+    # Adding new column called team 
+    stats_df["team"] = team_norm
+
+    stats_df.to_csv(f"resources/{league}/{local_filename}", index=False)
 
     return 
 
+
+def create_league_stats_csv(league: str, type:str) -> None:
+    """
+    Joins all the team tables for each league into one table
+
+    :param league: league name
+    :param type: either team_batting or team_pitching
+    """
+    appended_data = []
+    for infile in glob.glob(f"resources/{league}/*{type}.csv"):
+        data = pd.read_csv(infile)
+        # store DataFrame in list
+        appended_data.append(data)
+    # see pd.concat documentation for more info
+    appended_data = pd.concat(appended_data)
+    # write DataFrame to an excel sheet 
+    appended_data.to_csv(f"resources/{league}/{league}_{type}.csv", index=False)
+    return
+
+
+def create_npb_stats_csv(type: str):
+    """
+    Joins all the league tables into one NPB table
+    
+    :param type: either team_batting or team_pitching
+    """
+    leagues = ["central", "pacific"]
+    npb_data = []
+
+    for league in leagues:
+        data = pd.read_csv(f"resources/{league}/{league}_{type}.csv")
+        npb_data.append(data)
+
+    npb_data = pd.concat(npb_data)
+    npb_data.to_csv(f"resources/npb_all_{type}.csv", index=False)
+    
+    return
 
 def main(base_url):
 
@@ -123,20 +164,30 @@ def main(base_url):
     # Loop through pacific teams and save result locally to CSV
     for team in pacfic_teams_dict:
         print(team)
-        batting_stats = get_stats_table(pacfic_teams_dict[team], team, "team_batting")
+        batting_stats = get_stats_table(pacfic_teams_dict[team], team, "team_batting", "pacific")
         sleep(3)
-        pitching_stats = get_stats_table(pacfic_teams_dict[team], team, "team_pitching")
+        pitching_stats = get_stats_table(pacfic_teams_dict[team], team, "team_pitching", "pacific")
         sleep(3)
         print("*"*10)
 
     # Loop through central teams and save result locally to CSV
     for team in central_teams_dict:
         print(team)
-        batting_stats = get_stats_table(central_teams_dict[team], team, "team_batting")
+        batting_stats = get_stats_table(central_teams_dict[team], team, "team_batting", "central")
         sleep(3)
-        pitching_stats = get_stats_table(central_teams_dict[team], team, "team_pitching")
+        pitching_stats = get_stats_table(central_teams_dict[team], team, "team_pitching", "central")
         sleep(3)
         print("*"*10)
+
+    types = ["team_batting", "team_pitching"]
+    leagues = ["central", "pacific"]
+
+    for league in leagues:
+        for type in types:
+            create_league_stats_csv(league, type)
+
+    for type in types:
+        create_npb_stats_csv(type)
     
     return 
 
